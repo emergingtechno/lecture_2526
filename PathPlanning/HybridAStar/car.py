@@ -23,7 +23,7 @@ BUBBLE_R = np.hypot((LF + LB) / 2.0, W / 2.0)  # bubble radius
 VRX = [LF, LF, -LB, -LB, LF]
 VRY = [W / 2, -W / 2, -W / 2, W / 2, W / 2]
 
-
+# TODO
 def check_car_collision(x_list, y_list, yaw_list, ox, oy, kd_tree):
     for i_x, i_y, i_yaw in zip(x_list, y_list, yaw_list):
         cx = i_x + BUBBLE_DIST * cos(i_yaw)

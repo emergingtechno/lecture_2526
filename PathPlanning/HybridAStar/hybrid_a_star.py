@@ -5,6 +5,7 @@ import numpy as np, time
 from scipy.spatial import cKDTree
 import sys
 import pathlib
+import matplotlib.animation as animation
 sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 from dynamic_programming_heuristic import calc_distance_heuristic
@@ -15,15 +16,17 @@ XY_GRID_RESOLUTION = 2.0  # [m]
 YAW_GRID_RESOLUTION = np.deg2rad(15.0)  # [rad]
 MOTION_RESOLUTION = 0.1  # [m] path interpolate resolution
 N_STEER = 20  # number of steer command
-show_animation = True
+show_animation = False
 
 
 # TODO: Change cost to find a efficient path
-SB_COST = 1.0  # switch back penalty cost
-BACK_COST = 1.0  # backward penalty cost
-STEER_CHANGE_COST = 1.0  # steer angle change penalty cost
+# Control
+SB_COST = 100.0  # switch back penalty cost
+BACK_COST = 5.0  # backward penalty cost
+STEER_CHANGE_COST = 5.0  # steer angle change penalty cost
 STEER_COST = 1.0  # steer angle change penalty cost
-H_COST = 1.0  # Heuristic cost
+H_COST = 5.0  # Heuristic cost
+COLL_COST = 99999999
 
 class Node:
 
@@ -176,8 +179,6 @@ def update_node_with_analytic_expansion(current, goal,
     path = analytic_expansion(current, goal, ox, oy, kd_tree)
 
     if path:
-        if show_animation:
-            plt.plot(path.x, path.y)
         f_x = path.x[1:]
         f_y = path.y[1:]
         f_yaw = path.yaw[1:]
@@ -283,15 +284,6 @@ def hybrid_a_star_planning(start, goal, ox, oy, xy_resolution, yaw_resolution):
         else:
             continue
 
-        if show_animation:  # pragma: no cover
-            plt.plot(current.x_list[-1], current.y_list[-1], "xc")
-            # for stopping simulation with the esc key.
-            plt.gcf().canvas.mpl_connect(
-                'key_release_event',
-                lambda event: [exit(0) if event.key == 'escape' else None])
-            if len(closedList.keys()) % 10 == 0:
-                plt.pause(0.001)
-
         is_updated, final_path = update_node_with_analytic_expansion(
             current, goal_node, config, ox, oy, obstacle_kd_tree)
 
@@ -318,7 +310,7 @@ def hybrid_a_star_planning(start, goal, ox, oy, xy_resolution, yaw_resolution):
 def calc_cost(n, h_dp, c):
     ind = (n.y_index - c.min_y) * c.x_w + (n.x_index - c.min_x)
     if ind not in h_dp:
-        return n.cost + 999999999  # collision cost
+        return n.cost + COLL_COST  # collision cost
     return n.cost + H_COST * h_dp[ind].cost
     #TODO Define cost function here
 
@@ -377,13 +369,12 @@ def eval_metrics(path):
     lengths = np.hypot(diffs[:,0], diffs[:,1])
     L = np.sum(lengths)
 
-    # 2. Smoothness (curvature variation)
     thetas = np.arctan2(diffs[:,1], diffs[:,0])
     smoothness = np.mean(np.abs(np.diff(thetas, n=2))) if len(thetas) > 2 else 0
     return L, smoothness
 
 def team_score(length, smooth, compute):
-    return 1.0 * length + 1.0 * smooth + 1.0 * compute
+    return 1.5 * length + 20000.0 * smooth + 1.0 * compute
 
 def main():
     print("Start Hybrid A* planning")
@@ -411,18 +402,10 @@ def main():
 
     # Set Initial parameters
     start = [10.0, 10.0, np.deg2rad(90.0)]
-    goal = [50.0, 50.0, np.deg2rad(90.0)]
+    goal = [30.0, 10.0, np.deg2rad(-90.0)]
 
     print("start : ", start)
     print("goal : ", goal)
-
-    if show_animation:
-        plt.plot(ox, oy, ".k")
-        rs.plot_arrow(start[0], start[1], start[2], fc='g')
-        rs.plot_arrow(goal[0], goal[1], goal[2])
-
-        plt.grid(True)
-        plt.axis("equal")
 
     startt = time.time()
 
@@ -435,15 +418,18 @@ def main():
     y = path.y_list
     yaw = path.yaw_list
 
-    if show_animation:
-        for i_x, i_y, i_yaw in zip(x, y, yaw):
+    def update(i):
             plt.cla()
             plt.plot(ox, oy, ".k")
             plt.plot(x, y, "-r", label="Hybrid A* path")
             plt.grid(True)
             plt.axis("equal")
-            plot_car(i_x, i_y, i_yaw)
-            plt.pause(0.0001)
+            plot_car(x[i], y[i],yaw[i])
+            #plt.pause(0.0001)
+
+    fig, ax = plt.subplots()
+    ani = animation.FuncAnimation(fig, update, frames=len(x), interval=50)
+    ani.save("hybrid_astar.gif", writer="pillow", fps=20)
 
     length, smooth = eval_metrics(path)
 
@@ -459,6 +445,7 @@ def main():
     print(team_score(length, smooth, compute))
 
     print(__file__ + " done!!")
+
 
 if __name__ == '__main__':
     main()
